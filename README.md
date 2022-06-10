@@ -227,3 +227,179 @@ SE [-version] [-threads <threads>] [-phred33|-phred64] [-trimlog <trimLogFile>] 
 Trimmomatic expects the two input files, and then the names of the output files. See table below:
 
 ![001](https://user-images.githubusercontent.com/103220850/173130044-969ac3f9-4b7b-454c-ab09-16a584b459a4.jpg)
+
+Trimmomatic main arguments and methods are:
+
+<img width="499" alt="002" src="https://user-images.githubusercontent.com/103220850/173130713-208ff278-0d11-46aa-a085-82fedc7804f0.png">
+
+An overview of the sliding window trimming is presented below.
+
+![003](https://user-images.githubusercontent.com/103220850/173133082-91b7a8b3-1d16-425b-9429-19f324921b76.jpg)
+
+A code example:
+
+```
+$ trimmomatic PE -threads 4 SRR_1056_1.fastq SRR_1056_2.fastq\
+              SRR_1056_1.trimmed.fastq SRR_1056_1un.trimmed.fastq\
+              SRR_1056_2.trimmed.fastq SRR_1056_2un.trimmed.fastq\
+              ILLUMINACLIP:SRR_adapters.fa SLIDINGWINDOW:4:20
+```
+
+Read the table below to check arguments and methods and their meaning in the script above: 
+
+![005](https://user-images.githubusercontent.com/103220850/173133339-be35efd9-ecc9-4c8b-b162-900273beeda1.jpg)
+
+On the pages above you may have seen a lot of scores used for indicate quality, most of this scores are on the phred scale.
+
+The Phred scale was originally used to represent base quality scores emitted by the Phred program in the early days of the Human Genome Project. Now they are widely used to represent probabilities and confidence scores in other contexts of genome science.
+
+Most useable Phred-scaled base quality scores range from 2 to 40, However, Phred-scaled quality scores in general can range anywhere from 0 to infinity. A higher score indicates a higher probability that a particular decision is correct, while conversely, a lower score indicates a higher probability that the decision is incorrect.
+
+For many purposes, a Phred Score of 20 or above is acceptable, because this means that whatever it qualifies is 99% accurate, with a 1% chance of error.
+
+![006](https://user-images.githubusercontent.com/103220850/173133496-cb7f5def-555b-406b-b772-c17c2c6be439.jpg)
+
+# 02_Reference_Genome_Indexing
+
+Indexing is widely used in bioinformatics workflows to improve performance. Typically it is applied to large data files with many records to improve the ability of tools to rapidly access random locations of the file. 
+
+The most common example of this is the reference genome. Each alignment algorithm (and sometimes even different versions of the same algorithm) requires its own distinctive index. Having the right index for each tool is important, and trying to use an incorrect one is a common error encountered in this kind of analysis.
+
+# 03_BWA_Alignment
+
+BWA is a software package for mapping low-divergent sequences against a large reference genome, such as the human genome.
+
+Depending on read length, BWA has different modes optimized for different sequence lengths:
+
+**BWA-backtrack**: designed for Illumina sequence reads up to 100bp (3-step)
+
+**BWA-SW**: designed for longer sequences ranging from 70bp to 1Mbp, long-read support and split alignment
+
+**BWA-MEM**: shares similar features to BWA-SW, but BWA-MEM is the latest, and is generally recommended for high-quality queries as it is faster and more accurate. BWA-MEM also has better performance than BWA-backtrack for 70-100bp Illumina reads.
+
+### Creating BWA-MEM index
+
+The first step in the BWA alignment is to create an index for the reference genome. Similar to Bowtie2, BWA indexes the genome with an FM Index based on the Burrows-Wheeler Transform to keep memory requirements low for the alignment process.
+
+The basic options for indexing the genome using BWA are:
+
+_-p: prefix for all index files_
+
+```
+$ bwa index -p chr20 chr20.fa
+```
+
+**_Genome index is necesary for using the algorithms._**
+
+### Using BWA 
+
+Ejm:
+
+```
+	bwa mem 
+	-M 
+	-t 1 
+	-R '@RG\tID:{FLOWCELL}.{LANE}\tPU:{FLOWCELL_BARCODE}.{LANE}.{SAMPLE}\tSM:{SAMPLE}\tPL:{PLATFORM}\tLB{LIBRARY}' 
+	<genome_prefix> 
+	<reads_1.fq> 
+	<reads_2.fq> > 
+	<samplename_bwa.sam>
+```
+Arguments and their respective meaning are shown in the table below:
+
+| Argument        | Meaning     
+| ------------- |:-------------:
+| -M      | Mark shorter split hits as secondary (for Picard compatibility)
+| -t INT	      | Number of threads      
+| -R STR | Complete read group header line. ’\t’ can be used in STR and will be converted 				to a TAB in the output SAM. The read group ID will be attached to every read in 			the output. An example is ’@RG\tID:foo\tSM:bar’
+| genome_prefix	      | Index for the reference genome generated from bwa index 
+| <reads_1.fq>	      | Input reads pair ends 1 (files generated from Trimommatic)  
+| <reads_2.fq>	      | Input reads pair ends 2 (files generated from Trimommatic)
+| > <samplename_bwa.sam>	      | Output file
+
+# 04_SAM BAM files conversion (samtools)
+
+BAM (binary alignment and map) files contain the same information as SAM (sequence alignment and map) files, except they are in binary file format which is not readable by humans. On the other hand, BAM files are smaller and more efficient for software to work with than SAM files, saving time and reducing costs of computation and storage.
+
+Conversion to BAM files is carried on with the samtools view comand (must have samtools installed), important flags are marked below:
+
+ejm.
+
+```
+samtools view -S -b sample.sam > sample.bam
+
+	-s Input in SAM format.
+	-b Output in BAM format. 
+```
+
+Alternatively SAM to BAM conversion may be done with picard:
+
+```
+SamFormatConverter
+
+	-I input file
+	-O output file
+```
+# 05_Sort BAM
+
+After conversion to a BAM file, the next steps are to sort and index the file. Indexing is crucial to save computing time and perform other steps more rapidly. Sorting is merely a rearrangement of the aligments in the BAM/SAM file  according to coordinates (position) or by name (ID). Sorting may be done with samtools or picard:
+
+`samtools sort`
+
+```
+samtools sort sample.bam -o sample.sorted.bam
+
+	-o output file
+	-n sort reads by name
+```
+
+`SortSam (picard)`
+```
+java -jar picard.jar SortSam \
+	INPUT=input.bam \
+     	OUTPUT=sorted.bam \
+     	SORT_ORDER=coordinate
+```
+
+The --SORT_ORDER argument is an enumerated type (SortOrder), which can have one of the following values:
+
+* `queryname`
+* `coordinate`
+* `duplicate`
+
+# 06_Alignement metrics
+
+Several tools can be used in order to evaluate quality in BAM files, Samtools, Picard and Sambamba are some of the most useful and common:
+
+Samtools
+
+```samtools stats``` 
+
+Picard
+
+```CollectAlignmentSummaryMetrics```
+
+Sambamba
+
+```sambamba-flagstat``` 
+	
+Several tools can be used in order to evaluate quality in BAM files, Samtools, Picard and Sambamba are some of the most useful and common:
+
+![007](https://user-images.githubusercontent.com/103220850/173136775-8d696ea5-488c-4d60-b9b5-f8a0a06c5408.jpg)
+
+# 07_Mark and remove duplicates
+
+
+
+```
+```
+### References
+
+Trimmomatic Manual: V0.32 
+
+https://gatk.broadinstitute.org/hc/en-us/articles/360035531872-Phred-scaled-quality-scores
+
+http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/TrimmomaticManual_V0.32.pdf
+
+https://carpentries-incubator.github.io/metagenomics/03-trimming-filtering/index.html
+
